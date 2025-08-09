@@ -5,6 +5,10 @@ import time
 import sys
 import os
 
+# Ensure project root is on sys.path when running this file directly
+if __package__ is None or __package__ == "":
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # Global op registry: name -> callable(args: dict, ctx: dict) -> any
 OPS: dict[str, object] = {}
 
@@ -32,7 +36,12 @@ def load_graph(path):
                 if not line.strip():
                     continue
                 n = json.loads(line)
-                if n["kind"] == "@import":
+                try:
+                    from runtime.vocab import normalize_node as _normalize_node
+                    n = _normalize_node(n)
+                except Exception:
+                    pass
+                if n.get("kind") == "@import":
                     rel = n.get("path")
                     if not isinstance(rel, str) or not rel:
                         continue
@@ -40,16 +49,26 @@ def load_graph(path):
                     s2, f2, fl2 = load_graph(child)
                     _merge(s2, f2, fl2)
                     continue
-                if n["kind"] == "@shape":
+                if n.get("kind") == "@shape":
                     shape_def = {"fields": n.get("fields", {})}
                     if "defaults" in n:
                         shape_def["defaults"] = n["defaults"]
                     if "doc" in n:
                         shape_def["doc"] = n["doc"]
                     shapes[n["id"]] = shape_def
-                elif n["kind"] == "@fn":
+                elif n.get("kind") == "@def":
+                    # Type definition - aliases, unions, literals, branded types
+                    type_def = {"kind": "def"}
+                    if "type" in n:
+                        type_def["type"] = n["type"]
+                    if "doc" in n:
+                        type_def["doc"] = n["doc"]
+                    if "constraint" in n:
+                        type_def["constraint"] = n["constraint"]
+                    shapes[n["id"]] = type_def
+                elif n.get("kind") == "@fn":
                     fns[n["id"]] = n
-                elif n["kind"] == "@flow":
+                elif n.get("kind") == "@flow":
                     flow.extend(n.get("edges", []))
 
     _load_file(path, set())
@@ -84,10 +103,125 @@ def resolve_args(args, env):
     return {k: resolve_value(v) for k, v in (args or {}).items()}
 
 
+def _resolve_def_type(def_obj, shapes):
+    """Resolve a @def type definition to a shape-like structure for validation."""
+    type_spec = def_obj.get("type", "str")
+
+    # Handle type aliases - resolve recursively
+    if isinstance(type_spec, str) and type_spec in shapes:
+        return _get_shape_def(type_spec, shapes)
+
+    # Handle union types: "str | int | UserType"
+    if isinstance(type_spec, str) and " | " in type_spec:
+        union_types = [t.strip() for t in type_spec.split(" | ")]
+        # For validation, treat unions as allowing any of the component types
+        return {"fields": {}, "union": union_types, "kind": "union"}
+
+    # Handle literal types: "success" | "error" | "pending"
+    if isinstance(type_spec, str) and type_spec.startswith('"') and type_spec.endswith('"'):
+        literal_value = type_spec[1:-1]  # Remove quotes
+        return {"fields": {}, "literal": literal_value, "kind": "literal"}
+
+    # Handle arrays of literals: ["success", "error", "pending"]
+    if isinstance(type_spec, list):
+        return {"fields": {}, "enum": type_spec, "kind": "enum"}
+
+    # Handle constraint-based types (branded primitives)
+    if isinstance(type_spec, str) and def_obj.get("constraint"):
+        base_type = type_spec
+        constraint = def_obj.get("constraint")
+        return {"fields": {}, "base_type": base_type, "constraint": constraint, "kind": "constrained"}
+
+    # Handle primitive type aliases
+    if isinstance(type_spec, str):
+        # Map to a single-field object for compatibility
+        return {"fields": {"value": type_spec}}
+
+    return {"fields": {}}
+
+
+def _validate_union_type(obj, shape_def, shapes):
+    """Validate against union type - obj must match at least one of the union types."""
+    union_types = shape_def.get("union", [])
+    for union_type in union_types:
+        try:
+            if union_type in shapes:
+                validate_against_shape(obj, union_type, shapes)
+                return True
+            else:
+                # Try primitive type validation
+                if union_type == "str" and isinstance(obj, str):
+                    return True
+                elif union_type == "int" and isinstance(obj, int):
+                    return True
+                elif union_type == "float" and isinstance(obj, (int, float)):
+                    return True
+                elif union_type == "bool" and isinstance(obj, bool):
+                    return True
+        except AssertionError:
+            continue
+    raise AssertionError(f"Value does not match any type in union: {union_types}")
+
+
+def _validate_literal_type(obj, shape_def):
+    """Validate against literal type - obj must exactly match the literal value."""
+    literal_value = shape_def.get("literal")
+    if obj != literal_value:
+        raise AssertionError(f"Value '{obj}' does not match literal '{literal_value}'")
+    return True
+
+
+def _validate_enum_type(obj, shape_def):
+    """Validate against enum type - obj must be one of the allowed values."""
+    enum_values = shape_def.get("enum", [])
+    if obj not in enum_values:
+        raise AssertionError(f"Value '{obj}' not in enum {enum_values}")
+    return True
+
+
+def _validate_constrained_type(obj, shape_def):
+    """Validate against constrained type - obj must match base type and satisfy constraint."""
+    base_type = shape_def.get("base_type", "str")
+    constraint = shape_def.get("constraint", {})
+
+    # First validate base type
+    if base_type == "str" and not isinstance(obj, str):
+        raise AssertionError(f"Expected string, got {type(obj).__name__}")
+    elif base_type == "int" and not isinstance(obj, int):
+        raise AssertionError(f"Expected int, got {type(obj).__name__}")
+    elif base_type == "float" and not isinstance(obj, (int, float)):
+        raise AssertionError(f"Expected number, got {type(obj).__name__}")
+    elif base_type == "bool" and not isinstance(obj, bool):
+        raise AssertionError(f"Expected bool, got {type(obj).__name__}")
+
+    # Then validate constraints
+    if "minLength" in constraint and isinstance(obj, str):
+        if len(obj) < constraint["minLength"]:
+            raise AssertionError(f"String length {len(obj)} below minimum {constraint['minLength']}")
+    if "maxLength" in constraint and isinstance(obj, str):
+        if len(obj) > constraint["maxLength"]:
+            raise AssertionError(f"String length {len(obj)} above maximum {constraint['maxLength']}")
+    if "pattern" in constraint and isinstance(obj, str):
+        import re
+        if not re.match(constraint["pattern"], obj):
+            raise AssertionError(f"String '{obj}' does not match pattern '{constraint['pattern']}'")
+    if "min" in constraint and isinstance(obj, (int, float)):
+        if obj < constraint["min"]:
+            raise AssertionError(f"Value {obj} below minimum {constraint['min']}")
+    if "max" in constraint and isinstance(obj, (int, float)):
+        if obj > constraint["max"]:
+            raise AssertionError(f"Value {obj} above maximum {constraint['max']}")
+
+    return True
+
+
 def _get_shape_def(shape_name, shapes):
     raw = shapes.get(shape_name, {})
     if isinstance(raw, dict) and "fields" in raw:
         return raw
+    if isinstance(raw, dict) and raw.get("kind") == "def":
+        # For @def types, resolve to their underlying type
+        return _resolve_def_type(raw, shapes)
     if isinstance(raw, dict):
         return {"fields": raw}
     return {"fields": {}}
@@ -147,6 +281,17 @@ def _apply_shape_defaults(obj, shape_name, shapes):
 
 def validate_against_shape(obj, shape_name, shapes):
     shape_def = _get_shape_def(shape_name, shapes)
+
+    # Handle special @def type kinds
+    if shape_def.get("kind") == "union":
+        return _validate_union_type(obj, shape_def, shapes)
+    elif shape_def.get("kind") == "literal":
+        return _validate_literal_type(obj, shape_def)
+    elif shape_def.get("kind") == "enum":
+        return _validate_enum_type(obj, shape_def)
+    elif shape_def.get("kind") == "constrained":
+        return _validate_constrained_type(obj, shape_def)
+
     fields = shape_def.get("fields", {})
     if not isinstance(obj, dict):
         raise AssertionError("Result is not an object")
@@ -182,6 +327,12 @@ def validate_against_shape(obj, shape_name, shapes):
         if isinstance(t, str) and t.startswith("map"):
             if not isinstance(v, dict):
                 raise AssertionError(f"Field '{key}' not map/object")
+        # Check if field type is a custom shape or @def type
+        if isinstance(t, str) and t in shapes:
+            try:
+                validate_against_shape(v, t, shapes)
+            except AssertionError as e:
+                raise AssertionError(f"Field '{key}' validation failed: {e}")
     return True
 
 
@@ -412,18 +563,33 @@ def exec_fn(fn, shapes, fns, inbound=None):
     if inbound is not None:
         declared_inputs = (fn.get("in") or {})
         if declared_inputs:
-            for name in declared_inputs.keys():
-                env[name] = inbound
+            if len(declared_inputs) == 1 and isinstance(inbound, dict):
+                # Single input with dict inbound - check if dict has matching key
+                input_name = next(iter(declared_inputs.keys()))
+                if input_name in inbound:
+                    env[input_name] = inbound[input_name]
+                else:
+                    env[input_name] = inbound
+            elif len(declared_inputs) == 1:
+                # Single input with scalar inbound - bind directly
+                input_name = next(iter(declared_inputs.keys()))
+                env[input_name] = inbound
+            else:
+                # Multiple inputs - map entire inbound to each
+                for name in declared_inputs.keys():
+                    env[name] = inbound
 
-    for k, v in fn.get("@const", {}).items():
+
+    for k, v in (fn.get("@const") or {}).items():
         env[k] = v
 
     explain = bool(os.getenv("ALP_EXPLAIN"))
     provenance = []
-    for idx, op in enumerate(fn.get("@op", [])):
+    for idx, op in enumerate((fn.get("@op") or [])):
         name, args = op[0], (op[1] if len(op) > 1 else {})
         bind_meta = (op[2] if len(op) > 2 and isinstance(op[2], dict) else {})
         a = resolve_args(args, env)
+
         if name not in OPS:
             raise RuntimeError(f"Unknown op: {name}")
         ctx = {
@@ -456,8 +622,8 @@ def exec_fn(fn, shapes, fns, inbound=None):
             except Exception:
                 pass
 
-    if "@llm" in fn:
-        spec = fn["@llm"]
+    if fn.get("@llm") is not None:
+        spec = fn.get("@llm") or {}
         task = spec.get("task")
         inp = resolve_args(spec.get("input") or {}, env)
         if not inp and inbound is not None:
@@ -602,8 +768,13 @@ def run(path):
         else:
             # terminal node from src
             edge_meta[(src, None)] = meta or {}
-    # queue nodes with indegree 0 based on file order
-    order = [k for k in fns.keys() if indeg.get(k, 0) == 0]
+    # queue nodes with indegree 0 that are actually in the flow
+    flow_nodes = set()
+    for src, dst, meta in flow:
+        flow_nodes.add(src)
+        if dst:
+            flow_nodes.add(dst)
+    order = [k for k in fns.keys() if indeg.get(k, 0) == 0 and k in flow_nodes]
     # If graph has no edges, order will contain all nodes
     from collections import deque
     q = deque(order)

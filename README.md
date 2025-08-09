@@ -11,9 +11,28 @@ ALP_HTTP_ALLOWLIST=example.com uv run python main.py examples/io_example.alp
 
 ## Language features
 
+- `@def` — declares type aliases, unions, literals, and constrained types
 - `@shape` — declares simple structs with fields and primitive types (`str`, `int`, `float`, `bool`, `ts`)
 - `@fn` — function node with optional `in`, `out`, `@const`, `@op`, `@llm`, `@expect`, `@retry`
 - `@flow` — list of edges `[src, dst, meta]`
+
+### Type definitions with `@def`
+
+The `@def` construct supports advanced type definitions beyond basic structs:
+
+- **Type aliases**: `{"kind":"@def","id":"UserId","type":"str"}`
+- **Union types**: `{"kind":"@def","id":"StringOrNumber","type":"str | int"}`
+- **Literal enums**: `{"kind":"@def","id":"Status","type":["pending","success","error"]}`
+- **Constrained types**: `{"kind":"@def","id":"Email","type":"str","constraint":{"pattern":"^[^@]+@[^@]+$"}}`
+
+Supported constraints: `minLength`, `maxLength`, `pattern` (regex), `min`, `max` for numbers.
+
+### Stable vocabulary (tokens <-> concept IDs)
+
+- The VM accepts either textual tokens or stable concept IDs (CIDs) shipped with the SDK for core constructs.
+- Supported tokens: `@def`, `@fn`, `@op`, `@llm`, `@tool`, `@flow`, `@in`, `@out`, `@expect`, `@shape`, `@intent`, `@emb`, `@pkg`, `@caps`, `@const`, `@var`, `@err`, `@retry`, `@cache`, `@idemp`, `@trace`, `@hash`, `@ver`, `@meta`, `@test`.
+- Keys `@in`/`@out` normalize to `in`/`out` fields for compatibility with existing programs.
+- See `runtime/vocab.py` for the token->CID mapping and meanings, and to export the list for SDKs.
 
 ### Built-in ops
 - `add({ a, b }) -> number`

@@ -1,0 +1,9 @@
+{"kind":"@def","id":"UserId","type":"str","constraint":{"pattern":"^[a-z0-9]+$","minLength":3,"maxLength":20}}
+{"kind":"@def","id":"Status","type":["pending","success","error"]}
+{"kind":"@def","id":"StringOrNumber","type":"str | int"}
+{"kind":"@def","id":"UserIdAlias","type":"UserId"}
+{"kind":"@def","id":"PositiveInt","type":"int","constraint":{"min":1}}
+{"kind":"@shape","id":"User","fields":{"id":"UserId","status":"Status","score":"PositiveInt"}}
+{"kind":"@shape","id":"Result","fields":{"user":"User","value":"StringOrNumber"}}
+{"kind":"@fn","id":"test_types","in":{},"out":"Result","@const":{"user":{"id":"user123","status":"success","score":85},"value":"hello"},"@expect":{"type":"Result","synthesize":true}}
+{"kind":"@flow","edges":[["test_types",null,{}]]}

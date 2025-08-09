@@ -1,0 +1,6 @@
+{"kind":"@shape","id":"TextItems","fields":{"items":"list<str>"}}
+{"kind":"@shape","id":"Classification","fields":{"label":"str"}}
+{"kind":"@shape","id":"Classifications","fields":{"items":"list<Classification>"}}
+{"kind":"@fn","id":"get_inputs","in":{},"out":"TextItems","@const":{"items":["I love pizza","Rainy days are gloomy","The movie was fantastic!","This is terrible."]},"@expect":{"type":"TextItems","synthesize":true}}
+{"kind":"@fn","id":"batch_classify","in":{"data":"TextItems"},"out":"Classifications","@op":[["llm_batch", {"task":"Classify each text as Positive or Negative.", "items":"$data.items", "schema":"Classification"}, {"as":"items"}]],"@expect":{"type":"Classifications","synthesize":true}}
+{"kind":"@flow","edges":[["get_inputs","batch_classify",{}]]}

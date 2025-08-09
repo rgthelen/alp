@@ -325,6 +325,88 @@ def call_llm(task, input_obj, schema_name, shapes, retries=3, provider: str | No
     raise RuntimeError(f"LLM failed schema validation after {retries} attempts: {last_err}")
 
 
+def call_llm_batch(task, input_list, schema_name, shapes, retries=3, provider: str | None = None, model: str | None = None):
+    provider, model = get_provider(provider, model)
+    schema_dict_single = shape_to_json_schema(schema_name, shapes)
+    schema_dict_array = {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": f"{schema_name}Array",
+        "type": "array",
+        "items": schema_dict_single.get("properties") and {"type": "object", "properties": schema_dict_single["properties"], "required": schema_dict_single["required"], "additionalProperties": False} or {"type": "object"}
+    }
+    last_err = None
+    for _ in range(1, (retries or 1) + 1):
+        try:
+            if provider == "openai":
+                try:
+                    import openai  # type: ignore
+                except Exception:
+                    raise RuntimeError("OpenAI SDK not installed. pip install openai")
+                client = openai.OpenAI()
+                resp = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": "You are a JSON generator. Output ONLY JSON array where each element strictly matches the provided item JSON Schema."},
+                        {"role": "user", "content": json.dumps({"task": task, "inputs": input_list, "json_schema_array": schema_dict_array})},
+                    ],
+                    temperature=0.2,
+                )
+                text = (resp.choices[0].message.content if hasattr(resp.choices[0].message, "content") else resp.choices[0].message["content"]) or "[]"
+                arr = json.loads(text)
+            elif provider == "anthropic":
+                try:
+                    import anthropic  # type: ignore
+                except Exception:
+                    raise RuntimeError("Anthropic SDK not installed. pip install anthropic")
+                client = anthropic.Anthropic()
+                msg = client.messages.create(
+                    model=model,
+                    max_tokens=2048,
+                    temperature=0.2,
+                    system="Return ONLY a JSON array of objects matching the provided JSON structure. No explanations.",
+                    messages=[{"role": "user", "content": [{"type": "text", "text": "Task: " + task + "\n" + "Inputs: " + json.dumps(input_list) + "\n" + "Respond with a JSON array only."}]}],
+                )
+                parts = []
+                for b in msg.content:
+                    if hasattr(b, "type") and b.type == "text" and hasattr(b, "text"):
+                        parts.append(b.text)
+                    elif isinstance(b, dict) and b.get("type") == "text":
+                        parts.append(b.get("text", ""))
+                text = "".join(parts)
+                arr = json.loads(text)
+            else:
+                # mock provider — synthesize list from schema
+                props = schema_dict_single.get("properties", {})
+                def _default_for(prop):
+                    t = (prop or {}).get("type")
+                    if t == "string":
+                        return ""
+                    if t == "number":
+                        return 0
+                    if t == "boolean":
+                        return False
+                    if t == "array":
+                        return []
+                    if t == "object":
+                        return {}
+                    return None
+                arr = []
+                for _inp in (input_list or []):
+                    obj = {k: _default_for(props.get(k)) for k in schema_dict_single.get("required", [])}
+                    arr.append(obj)
+            # Validate each item
+            out = []
+            for item in arr:
+                validate_against_shape(item, schema_name, shapes)
+                out.append(item)
+            return out
+        except Exception as e:
+            last_err = e
+            input_list = [{"original": x, "error": str(e)} for x in (input_list or [])]
+            continue
+    raise RuntimeError(f"LLM batch failed schema validation after {retries} attempts: {last_err}")
+
+
 def exec_fn(fn, shapes, fns, inbound=None):
     env, result = {}, None
     if inbound is not None:
@@ -350,6 +432,7 @@ def exec_fn(fn, shapes, fns, inbound=None):
             "fns": fns,
             "exec_fn": lambda _fn, _inb=None: exec_fn(_fn, shapes, fns, inbound=_inb),
             "call_llm": lambda task, input_obj, schema, _shapes, retries=3, provider=None, model=None: call_llm(task, input_obj, schema, shapes, retries=retries, provider=provider, model=model),
+            "call_llm_batch": lambda task, items, schema, _shapes, retries=3, provider=None, model=None: call_llm_batch(task, items, schema, shapes, retries=retries, provider=provider, model=model),
             "get_provider": lambda provider=None, model=None: get_provider(provider, model),
             "hash": lambda o: hash_obj(o),
             "provenance": provenance,
@@ -427,10 +510,12 @@ def exec_fn(fn, shapes, fns, inbound=None):
         if "@llm" not in fn:
             validate_against_shape(result, exp_type, shapes)
 
+    # Provenance opt-in: suppress hashes if ALP_PROVENANCE_MINIMAL=1
+    minimal_prov = os.getenv("ALP_PROVENANCE_MINIMAL", "0") in ("1", "true", "yes")
     trace = {
         "node": fn.get("id"),
         "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "outputs_hash": hash_obj(result),
+        "outputs_hash": None if minimal_prov else hash_obj(result),
         "status": "ok",
         "provenance": provenance if provenance else None,
     }
@@ -454,8 +539,8 @@ def run(path):
         raise RuntimeError("No runnable nodes.")
 
     traces = []
-    data_out = None
-    last_node = None
+    data_out_by_node = {}
+    executed = set()
     def resolve_from_obj(ref, obj):
         if isinstance(ref, str) and ref.startswith("$"):
             key = ref[1:]
@@ -505,23 +590,60 @@ def run(path):
                     return left <= right
         return False
 
+    # Build adjacency and indegree for toposort
+    adj = {k: [] for k in fns.keys()}
+    indeg = {k: 0 for k in fns.keys()}
+    edge_meta = {}
     for src, dst, meta in flow:
-        if src != last_node:
-            fn = fns[src]
-            result, tr = exec_fn(fn, shapes, fns, inbound=data_out)
-            traces.append(tr)
-            data_out = result
-            last_node = src
         if dst:
-            when_cond = (meta or {}).get("when") if isinstance(meta, dict) else None
-            if eval_when(when_cond, data_out):
-                fn2 = fns[dst]
-                result2, tr2 = exec_fn(fn2, shapes, fns, inbound=data_out)
-                traces.append(tr2)
-                data_out = result2
-                last_node = dst
+            adj[src].append(dst)
+            indeg[dst] += 1
+            edge_meta[(src, dst)] = meta or {}
+        else:
+            # terminal node from src
+            edge_meta[(src, None)] = meta or {}
+    # queue nodes with indegree 0 based on file order
+    order = [k for k in fns.keys() if indeg.get(k, 0) == 0]
+    # If graph has no edges, order will contain all nodes
+    from collections import deque
+    q = deque(order)
+    last_result = None
+    while q:
+        node_id = q.popleft()
+        if node_id in executed:
+            continue
+        # inbound: prefer any predecessor's data if available, else last_result
+        inbound = None
+        # Try to find any predecessor result
+        preds = [s for (s, d) in edge_meta.keys() if d == node_id]
+        for p in preds:
+            if p in data_out_by_node:
+                inbound = data_out_by_node[p]
+                break
+        if inbound is None:
+            inbound = last_result
+        # Evaluate this node
+        result, tr = exec_fn(fns[node_id], shapes, fns, inbound=inbound)
+        traces.append(tr)
+        data_out_by_node[node_id] = result
+        last_result = result
+        executed.add(node_id)
+        # Enqueue neighbors whose indegree is now zero
+        for v in adj.get(node_id, []):
+            indeg[v] -= 1
+            if indeg[v] == 0:
+                # Check condition on edge
+                meta = edge_meta.get((node_id, v)) or {}
+                if eval_when(meta.get("when"), result):
+                    q.append(v)
+        # If this node had a terminal edge (dst None), check its when
+        term_meta = edge_meta.get((node_id, None)) or {}
+        if term_meta.get("when") is not None:
+            # can be used to mark this as an output
+            pass
 
-    print(json.dumps({"result": data_out, "trace": traces}, indent=2))
+    # Result: prefer last_result, else any terminal nodes' results
+    print(json.dumps({"result": last_result, "trace": traces}, indent=2))
 
 
 if __name__ == "__main__":

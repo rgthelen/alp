@@ -1,0 +1,7 @@
+{"kind":"@shape","id":"DocText","fields":{"text":"str"}}
+{"kind":"@shape","id":"Summary","fields":{"title":"str","summary":"str"}}
+{"kind":"@shape","id":"WriteOK","fields":{"ok":"bool"}}
+{"kind":"@fn","id":"read_doc","in":{},"out":"DocText","@const":{"path":"README.md"},"@op":[["read_file", {"path":"$path"}]],"@expect":{"type":"DocText"}}
+{"kind":"@fn","id":"summarize_openai","in":{"doc":"DocText"},"out":"Summary","@llm":{"task":"Summarize the document with a concise title and a 3-5 sentence summary.","input":{"text":"$doc.text"},"schema":"Summary","provider":"openai","model":"gpt-4o-mini"},"@expect":{"type":"Summary","synthesize":true}}
+{"kind":"@fn","id":"format_and_write","in":{"summary":"Summary"},"out":"WriteOK","@const":{"out_path":"SUMMARY_OPENAI.md"},"@op":[["join", {"items":["# ","$summary.title","\n\n","$summary.summary","\n"], "sep":""}, {"as":"content"}], ["write_file", {"path":"$out_path","text":"$content"}]],"@expect":{"type":"WriteOK"}}
+{"kind":"@flow","edges":[["read_doc","summarize_openai",{}],["summarize_openai","format_and_write",{}]]}

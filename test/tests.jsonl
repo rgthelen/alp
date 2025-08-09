@@ -2,3 +2,5 @@
 {"program":"examples/hello_world.alp","expectContains":{"result.text":"Hello, World!"}}
 {"program":"examples/http_example.alp","env":{"ALP_HTTP_ALLOWLIST":"api.github.com"},"expectKeys":["result.full_name","result.stargazers_count"]}
 {"program":"examples/io_example.alp","env":{"ALP_HTTP_ALLOWLIST":"example.com"},"expectKeys":["result.text"]}
+{"program":"examples/doc_summarizer.alp","env":{"ALP_MODEL_PROVIDER":"mock","ALP_IO_ALLOW_WRITE":"1"},"expectKeys":["result.ok"]}
+{"program":"examples/doc_summarizer_batch.alp","env":{"ALP_MODEL_PROVIDER":"mock","ALP_IO_ALLOW_WRITE":"1","ALP_STDIN_ALLOW":"1"},"stdin":"README.md\nALP_SPEC.json\n","expectKeys":["result.ok"]}

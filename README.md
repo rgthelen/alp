@@ -28,6 +28,7 @@ ALP_HTTP_ALLOWLIST=example.com uv run python main.py examples/io_example.alp
 - Strings: `concat({ a, b } | { items }) -> string`, `join({ items, sep }) -> string`, `split({ text, sep }) -> list<string>`
 - File I/O: `read_file({ path, encoding? }) -> { text }`, `write_file({ path, text, encoding?, append? }) -> { ok }`
 - HTTP: Generic `http({ method, url, headers?, json?|data? }) -> { status:int, text:str }`
+ - Stdin: `read_stdin({ mode?: "all"|"line", max_bytes? }) -> { text }` (requires `ALP_STDIN_ALLOW=1`)
 
 ### Variables and argument resolution
 
@@ -72,6 +73,7 @@ ALP_HTTP_ALLOWLIST=example.com uv run python main.py examples/io_example.alp
 
 - File I/O is restricted to `ALP_IO_ROOT` (defaults to current working directory). Writes require `ALP_IO_ALLOW_WRITE=1`.
 - HTTP is disabled by default. Allow specific hosts with `ALP_HTTP_ALLOWLIST=host1,host2`. Local/Private IPs are blocked unless `ALP_HTTP_BLOCK_LOCAL=0`.
+ - Stdin reads are disabled by default. Enable with `ALP_STDIN_ALLOW=1`. Limit bytes with `ALP_STDIN_MAX_BYTES` or `max_bytes` arg.
 
 - Optional fields: use `?` suffix, e.g., `"b?":"float"`.
 - Enums: `"mode":"enum<fast,accurate>"` validates membership.
@@ -96,11 +98,14 @@ export ANTHROPIC_MODEL=claude-3-5-sonnet-20240620
 
 When no provider is configured, a strict mock provider synthesizes JSON matching the schema.
 
+Security: API keys are read from env vars only; do not hard-code keys in `.alp` files. Keep keys in your shell env or secrets manager.
+
 ## Examples
 
 - `hello_world.alp` — greeting piped into an LLM `respond` node
 - `calculator.alp` — demonstrates arithmetic and expression evaluation
 - `io_example.alp` — file read and HTTP fetch with sandboxing
 - `http_example.alp` — GitHub API fetch, JSON parse, and field extraction
+- `doc_summarizer_openai.alp` — uses OpenAI to summarize README into `SUMMARY_OPENAI.md`
 
 See `ALP_SPEC.json` for a machine-ingestible specification of the language and VM behavior.

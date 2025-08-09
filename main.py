@@ -5,7 +5,7 @@ import json
 import os
 
 # Execute the VM stub on the provided program (default: hello_world.alp)
-vm_path = str(Path(__file__).parent.joinpath("runtime","alp_vm.py"))
+vm_path = str(Path(__file__).parent.joinpath("runtime","vm.py"))
 program_path = sys.argv[1] if len(sys.argv) > 1 else str(Path(__file__).parent.joinpath("examples","hello_world.alp"))
 
 def _get_by_path(obj, path):
@@ -37,7 +37,12 @@ if program_path.endswith(".jsonl"):
         env = os.environ.copy()
         for k, v in (t.get("env") or {}).items():
             env[str(k)] = str(v)
-        run = subprocess.run([sys.executable, vm_path, prog], capture_output=True, text=True, env=env)
+        stdin_data = t.get("stdin")
+        run = subprocess.run([sys.executable, vm_path, prog], input=stdin_data, capture_output=True, text=True, env=env)
+        if run.returncode != 0 or not run.stdout.strip():
+            print(json.dumps({"program": t["program"], "status": "FAIL", "error": run.stderr.strip()}, indent=2))
+            ok = False
+            continue
         out = json.loads(run.stdout)
         # Flexible matching: exact, result equality, expectKeys existence, or expectContains substrings
         match = False

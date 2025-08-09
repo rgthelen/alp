@@ -1,13 +1,12 @@
-# ALP VM (stub)
-
-A tiny neural-symbolic VM that reads line-delimited JSON graph files with `@shape`, `@fn`, and `@flow` nodes, and can optionally call real LLM providers (OpenAI, Anthropic) or a mock provider.
+# Artificial Logic Protocol (ALP)
+A programming language/protocol designed specifically for LLMs
 
 ## Run
 
 ```bash
-uv run python main.py           # runs hello_world.alp
-uv run python main.py calculator.alp
-ALP_HTTP_ALLOWLIST=example.com uv run python main.py io_example.alp
+uv run python main.py           # runs examples/hello_world.alp
+uv run python main.py examples/calculator.alp
+ALP_HTTP_ALLOWLIST=example.com uv run python main.py examples/io_example.alp
 ```
 
 ## Language features
@@ -101,3 +100,7 @@ When no provider is configured, a strict mock provider synthesizes JSON matching
 
 - `hello_world.alp` — greeting piped into an LLM `respond` node
 - `calculator.alp` — demonstrates arithmetic and expression evaluation
+- `io_example.alp` — file read and HTTP fetch with sandboxing
+- `http_example.alp` — GitHub API fetch, JSON parse, and field extraction
+
+See `ALP_SPEC.json` for a machine-ingestible specification of the language and VM behavior.

@@ -5,8 +5,8 @@ import json
 import os
 
 # Execute the VM stub on the provided program (default: hello_world.alp)
-vm_path = str(Path(__file__).parent.joinpath("alp_vm.py"))
-program_path = sys.argv[1] if len(sys.argv) > 1 else str(Path(__file__).parent.joinpath("hello_world.alp"))
+vm_path = str(Path(__file__).parent.joinpath("runtime","alp_vm.py"))
+program_path = sys.argv[1] if len(sys.argv) > 1 else str(Path(__file__).parent.joinpath("examples","hello_world.alp"))
 
 def _get_by_path(obj, path):
   cur = obj

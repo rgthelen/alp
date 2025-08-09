@@ -1,0 +1,4 @@
+{"program":"examples/calculator.alp","expect":{"result":{"value":-36.0}}}
+{"program":"examples/hello_world.alp","expectContains":{"result.text":"Hello, World!"}}
+{"program":"examples/http_example.alp","env":{"ALP_HTTP_ALLOWLIST":"api.github.com"},"expectKeys":["result.full_name","result.stargazers_count"]}
+{"program":"examples/io_example.alp","env":{"ALP_HTTP_ALLOWLIST":"example.com"},"expectKeys":["result.text"]}

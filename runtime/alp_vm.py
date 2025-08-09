@@ -446,8 +446,6 @@ def op_http(args):
         data_bytes = (str(args.get("data"))).encode("utf-8")
     return _http_fetch(method, url, data_bytes, headers)
 
-# Legacy http_get/http_post removed; use op_http
-
 
 def _openai_call(task, input_obj, schema_dict, model):
     try:

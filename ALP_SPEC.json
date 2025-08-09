@@ -1,0 +1,123 @@
+{
+  "spec_version": "0.1.0",
+  "overview": {
+    "format": "line-delimited JSON (.alp). Each line is one JSON object.",
+    "kinds": ["@shape", "@fn", "@flow"],
+    "execution": "Linear traversal of @flow.edges in file order. Each edge is [src, dst, meta]. If meta.when is truthy, dst executes with src output as inbound.",
+    "validation": "Outputs are validated against @expect.type shapes; defaults applied before validation; result may be synthesized from env to satisfy shape fields.",
+    "arg_resolution": "$name and $dotted.path resolution inside @op args and @llm.input. Resolution is recursive within lists/objects.",
+    "bindings": "Each @op may include third metadata object {\"as\":\"name\"} to bind the op result in env.",
+    "env_exposure": "$result holds last op result; if result is numeric or has a numeric field \"value\", that value is also exposed as $value."
+  },
+  "types": {
+    "primitives": ["str", "int", "float", "bool", "ts"],
+    "collections": [
+      "list<T>",
+      "list",
+      "map<T>",
+      "map"
+    ],
+    "enum": "enum<a,b,c>"
+  },
+  "nodes": {
+    "@shape": {
+      "id": "string",
+      "fields": "object mapping fieldName -> type. Optional fields end with '?'. Enums via enum<...>. Collections supported.",
+      "defaults": "optional object of default values applied before validation",
+      "example": {"kind":"@shape","id":"Greeting","fields":{"text":"str"}}
+    },
+    "@fn": {
+      "id": "string",
+      "in": "object mapping paramName -> shapeId (optional)",
+      "out": "shapeId (declared output type)",
+      "@const": "object injected into env prior to ops (optional)",
+      "@op": "array of [name, argsObject, meta?]. meta may contain { as } for bindings.",
+      "@llm": {
+        "task": "string",
+        "input": "object (resolved with $) or uses inbound when empty",
+        "schema": "shapeId for strict validation"
+      },
+      "@retry": {"max": "int (optional)"},
+      "@expect": {"type": "shapeId"},
+      "example": {"kind":"@fn","id":"calc","in":{},"out":"CalcResult","@op":[["calc_eval",{"expr":"1+2"}], ["to_calc_result",{"value":"$value"}]],"@expect":{"type":"CalcResult"}}
+    },
+    "@flow": {
+      "edges": "array of [srcId, dstId|null, meta]",
+      "meta.when": "conditional expression (see conditions) controlling whether the destination executes",
+      "example": {"kind":"@flow","edges":[["start","next",{"when":{"gt":["$value",0]}}]]}
+    }
+  },
+  "conditions": {
+    "ops": ["eq", "ne", "gt", "gte", "lt", "lte", "and", "or", "not"],
+    "operands": "scalars or $paths into the previous node's output",
+    "truthy": "a string $path by itself is coerced to boolean"
+  },
+  "ops": [
+    {"name":"add","args":{"a":"number","b":"number"},"returns":"number"},
+    {"name":"sub","args":{"a":"number","b":"number"},"returns":"number"},
+    {"name":"mul","args":{"a":"number","b":"number"},"returns":"number"},
+    {"name":"div","args":{"a":"number","b":"number"},"returns":"number","errors":["ZeroDivisionError if b==0"]},
+    {"name":"pow","args":{"a":"number","b":"number"},"returns":"number"},
+    {"name":"neg","args":{"x":"number"},"returns":"number"},
+    {"name":"min","args":"{ a:number, b:number } or { items:number[] }","returns":"number"},
+    {"name":"max","args":"{ a:number, b:number } or { items:number[] }","returns":"number"},
+    {"name":"abs","args":{"x":"number"},"returns":"number"},
+    {"name":"round","args":{"x":"number","ndigits?":"int"},"returns":"number"},
+    {"name":"sum","args":{"items":"number[]"},"returns":"number"},
+    {"name":"avg","args":{"items":"number[]"},"returns":"number"},
+    {"name":"concat","args":"{ a:string, b:string } or { items:string[] }","returns":"string"},
+    {"name":"join","args":{"items":"any[]","sep":"string"},"returns":"string"},
+    {"name":"split","args":{"text":"string","sep":"string"},"returns":"string[]"},
+    {"name":"calc_eval","args":{"expr":"string"},"returns":"{ value:number }","notes":"Supports +,-,*,/,//,%,**, parentheses, unary +/-, and '^' as exponent."},
+    {"name":"to_calc_result","args":{"value":"number"},"returns":"{ value:number }"},
+    {"name":"map_each","args":{"items":"any[]","fn":"FnId","param?":"string"},"returns":"any[]","notes":"Calls function 'fn' for each item; if 'param' provided, wraps inbound as { param: item }"},
+    {"name":"read_file","args":{"path":"string","encoding?":"string"},"returns":"{ text:string }","security":"Path must resolve under ALP_IO_ROOT"},
+    {"name":"write_file","args":{"path":"string","text":"string","encoding?":"string","append?":"bool"},"returns":"{ ok:boolean }","security":"Requires ALP_IO_ALLOW_WRITE=1 and path under ALP_IO_ROOT"},
+    {"name":"http","args":{"method":"string","url":"string","headers?":"object","json?":"any","data?":"string"},"returns":"{ status:int, text:string }","security":"Requires ALP_HTTP_ALLOWLIST; local/private hosts blocked unless ALP_HTTP_BLOCK_LOCAL=0"},
+    {"name":"json_parse","args":{"text":"string"},"returns":"object"},
+    {"name":"json_get","args":{"obj":"any","path":"string"},"returns":"any","notes":"Dot path supports object keys and integer list indices"}
+  ],
+  "llm": {
+    "provider_env": {
+      "ALP_MODEL_PROVIDER": "mock|openai|anthropic (default: mock)",
+      "ALP_MODEL_NAME": "optional override of model name",
+      "OPENAI_MODEL": "default model if provider=openai",
+      "ANTHROPIC_MODEL": "default model if provider=anthropic"
+    },
+    "behavior": "When provider=mock, the VM synthesizes JSON that conforms to the requested schema; real providers are called with strict JSON-only prompts and validated.",
+    "retries": "@retry.max controls retry attempts on validation failures"
+  },
+  "io_and_http_sandbox": {
+    "ALP_IO_ROOT": "filesystem root for read/write operations (default: CWD)",
+    "ALP_IO_ALLOW_WRITE": "1 to enable write_file, else writes are blocked",
+    "ALP_HTTP_ALLOWLIST": "comma-separated hostnames allowed",
+    "ALP_HTTP_BLOCK_LOCAL": "1 (default) blocks localhost/private IPs; set 0 to allow",
+    "ALP_HTTP_TIMEOUT": "seconds (default 10)",
+    "ALP_HTTP_MAX_BYTES": "max response bytes (default 1,000,000)"
+  },
+  "debug": {
+    "ALP_EXPLAIN": "1 to print env snapshots after each op to stderr"
+  },
+  "resolution_rules": {
+    "dollar_paths": "$name and $a.b.c traverse env dicts; when traversing non-dicts, only 'value' is special-cased to allow $value to read numeric results.",
+    "recursive_args": "Lists and nested objects are recursively resolved",
+    "inbound_binding": "If a function declares inputs and inbound is provided, the VM maps inbound to declared names. If only one input is declared and inbound is scalar, it binds directly to that name.",
+    "synthesis_before_expect": "If @expect.type is declared and result is not an object, the VM will synthesize a result object using env keys that match shape field names before applying defaults and validating."
+  },
+  "testing": {
+    "runner_file": "tests.jsonl (optional)",
+    "row": {
+      "program": "string path to .alp",
+      "env": "optional map of env vars for this test",
+      "expect": "full expected JSON output",
+      "expectKeys": "array of dot-paths that must exist in the output",
+      "expectContains": "object of dot-path -> substring that must be contained in the string value"
+    }
+  },
+  "examples": [
+    "hello_world.alp",
+    "calculator.alp",
+    "io_example.alp",
+    "http_example.alp"
+  ]
+}

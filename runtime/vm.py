@@ -14,23 +14,45 @@ def register_op(name: str, func):
 
 
 def load_graph(path):
+    base_dir = os.path.dirname(os.path.abspath(path))
     shapes, fns, flow = {}, {}, []
-    with open(path) as f:
-        for line in f:
-            if not line.strip():
-                continue
-            n = json.loads(line)
-            if n["kind"] == "@shape":
-                shape_def = {"fields": n.get("fields", {})}
-                if "defaults" in n:
-                    shape_def["defaults"] = n["defaults"]
-                if "doc" in n:
-                    shape_def["doc"] = n["doc"]
-                shapes[n["id"]] = shape_def
-            elif n["kind"] == "@fn":
-                fns[n["id"]] = n
-            elif n["kind"] == "@flow":
-                flow.extend(n.get("edges", []))
+
+    def _merge(s2, f2, fl2):
+        shapes.update(s2)
+        fns.update(f2)
+        flow.extend(fl2)
+
+    def _load_file(pth, visited):
+        ap = os.path.abspath(pth)
+        if ap in visited:
+            return
+        visited.add(ap)
+        with open(ap) as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                n = json.loads(line)
+                if n["kind"] == "@import":
+                    rel = n.get("path")
+                    if not isinstance(rel, str) or not rel:
+                        continue
+                    child = os.path.join(os.path.dirname(ap), rel)
+                    s2, f2, fl2 = load_graph(child)
+                    _merge(s2, f2, fl2)
+                    continue
+                if n["kind"] == "@shape":
+                    shape_def = {"fields": n.get("fields", {})}
+                    if "defaults" in n:
+                        shape_def["defaults"] = n["defaults"]
+                    if "doc" in n:
+                        shape_def["doc"] = n["doc"]
+                    shapes[n["id"]] = shape_def
+                elif n["kind"] == "@fn":
+                    fns[n["id"]] = n
+                elif n["kind"] == "@flow":
+                    flow.extend(n.get("edges", []))
+
+    _load_file(path, set())
     return shapes, fns, flow
 
 
@@ -315,6 +337,7 @@ def exec_fn(fn, shapes, fns, inbound=None):
         env[k] = v
 
     explain = bool(os.getenv("ALP_EXPLAIN"))
+    provenance = []
     for idx, op in enumerate(fn.get("@op", [])):
         name, args = op[0], (op[1] if len(op) > 1 else {})
         bind_meta = (op[2] if len(op) > 2 and isinstance(op[2], dict) else {})
@@ -326,7 +349,10 @@ def exec_fn(fn, shapes, fns, inbound=None):
             "shapes": shapes,
             "fns": fns,
             "exec_fn": lambda _fn, _inb=None: exec_fn(_fn, shapes, fns, inbound=_inb),
-            "call_llm": lambda task, input_obj, schema, _shapes, retries=3: call_llm(task, input_obj, schema, shapes, retries=retries),
+            "call_llm": lambda task, input_obj, schema, _shapes, retries=3, provider=None, model=None: call_llm(task, input_obj, schema, shapes, retries=retries, provider=provider, model=model),
+            "get_provider": lambda provider=None, model=None: get_provider(provider, model),
+            "hash": lambda o: hash_obj(o),
+            "provenance": provenance,
         }
         result = OPS[name](a, ctx)
         env["result"] = result
@@ -353,6 +379,7 @@ def exec_fn(fn, shapes, fns, inbound=None):
         inp = resolve_args(spec.get("input") or {}, env)
         if not inp and inbound is not None:
             inp = inbound
+        t0 = time.time()
         result = call_llm(
             task,
             inp,
@@ -362,6 +389,7 @@ def exec_fn(fn, shapes, fns, inbound=None):
             provider=spec.get("provider"),
             model=spec.get("model"),
         )
+        t1 = time.time()
         env["result"] = result
         if isinstance(result, dict) and "value" in result:
             env["value"] = result["value"]
@@ -371,6 +399,15 @@ def exec_fn(fn, shapes, fns, inbound=None):
                 print(json.dumps({"node": fn.get("id"), "llm_result": preview}, indent=2), file=sys.stderr)
             except Exception:
                 pass
+        prov = {
+            "kind": "llm",
+            "provider": get_provider(spec.get("provider"), spec.get("model"))[0],
+            "model": get_provider(spec.get("provider"), spec.get("model"))[1],
+            "input_hash": hash_obj(inp),
+            "output_hash": hash_obj(result),
+            "ms": int((t1 - t0) * 1000),
+        }
+        provenance.append(prov)
 
     exp_type = (fn.get("@expect") or {}).get("type")
     if exp_type:
@@ -395,6 +432,7 @@ def exec_fn(fn, shapes, fns, inbound=None):
         "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "outputs_hash": hash_obj(result),
         "status": "ok",
+        "provenance": provenance if provenance else None,
     }
     return result, trace
 
@@ -407,10 +445,11 @@ def run(path):
 
     shapes, fns, flow = load_graph(path)
     if not flow:
-        for k, fn in fns.items():
-            if not fn.get("in"):
-                flow = [[k, None, {}]]
-                break
+        # fallback to any no-input fn; if multiple, run the first deterministically by id
+        candidates = [k for k, fn in fns.items() if not fn.get("in")]
+        if candidates:
+            start = sorted(candidates)[0]
+            flow = [[start, None, {}]]
     if not flow:
         raise RuntimeError("No runnable nodes.")
 

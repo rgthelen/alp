@@ -1,0 +1,2 @@
+{"kind":"@shape","id":"Noop","fields":{}}
+{"kind":"@fn","id":"noop","in":{},"out":"Noop","@op":[["json_parse", {"text":"{}"}]],"@expect":{"type":"Noop"}}

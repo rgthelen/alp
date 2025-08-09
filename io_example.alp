@@ -1,0 +1,4 @@
+{"kind":"@shape","id":"FileText","fields":{"text":"str"}}
+{"kind":"@fn","id":"readme_text","in":{},"out":"FileText","@const":{"path":"README.md"},"@op":[["read_file", {"path":"$path"}]],"@expect":{"type":"FileText"}}
+{"kind":"@fn","id":"fetch_example","in":{},"out":"FileText","@const":{"url":"https://example.com/"},"@op":[["http", {"method":"GET","url":"$url"}, {"as":"resp"}], ["concat", {"a":"$resp.text","b":""}, {"as":"text"}]],"@expect":{"type":"FileText"}}
+{"kind":"@flow","edges":[["readme_text", null, {}]]}

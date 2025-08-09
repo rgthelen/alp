@@ -1,0 +1,7 @@
+{"kind":"@shape","id":"TextInput","fields":{"text":"str"}}
+{"kind":"@shape","id":"Greeting","fields":{"text":"str"}}
+{"kind":"@shape","id":"Reply","fields":{"text":"str"}}
+{"kind":"@fn","id":"say_hello","in":{},"out":"TextInput", "@const":{"text":"Hello, World!"}, "@expect":{"type":"TextInput"}}
+{"kind":"@fn","id":"make_greeting","in":{"input":"TextInput"},"out":"Greeting", "@op":[["concat", {"a":"$input.text","b":""}, {"as":"text"}]], "@expect":{"type":"Greeting"}}
+{"kind":"@fn","id":"respond","in":{"greeting":"Greeting"},"out":"Reply", "@llm":{"task":"friendlify","input":{"greeting":"$greeting"},"schema":"Reply"},"@expect":{"type":"Reply"}}
+{"kind":"@flow","edges":[["say_hello","make_greeting",{}],["make_greeting","respond",{}]]}

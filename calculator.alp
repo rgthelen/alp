@@ -1,0 +1,4 @@
+{"kind":"@shape","id":"CalcResult","fields":{"value":"float"}}
+{"kind":"@fn","id":"calc_entry","in":{},"out":"CalcResult","@const":{"expr":"(1+2)*3 - 4/2"},"@op":[["calc_eval",{"expr":"$expr"}]],"@expect":{"type":"CalcResult"}}
+{"kind":"@fn","id":"calc_chain","in":{},"out":"CalcResult","@const":{"a":6,"b":3},"@op":[["add",{"a":"$a","b":"$b"},{"as":"sum"}],["mul",{"a":"$sum","b":2},{"as":"twice"}],["div",{"a":"$twice","b":3},{"as":"third"}],["pow",{"a":"$third","b":2},{"as":"squared"}],["neg",{"x":"$squared"},{"as":"negated"}],["to_calc_result",{"value":"$negated"}]],"@expect":{"type":"CalcResult"}}
+{"kind":"@flow","edges":[["calc_entry",null,{}],["calc_entry","calc_chain",{"when":{"gt":["$value",0]}}]]}

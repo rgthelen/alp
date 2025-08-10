@@ -96,6 +96,7 @@ _KIND_ALIASES = {
     "@def": "@def",
     "@shape": "@shape",
     "@fn": "@fn",
+    "@tool": "@tool",
     "@flow": "@flow",
 }
 _KIND_CID_ALIASES: Dict[str, str] = {token_to_cid(k).lower(): v for k, v in _KIND_ALIASES.items()}

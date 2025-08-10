@@ -13,6 +13,7 @@ ALP_HTTP_ALLOWLIST=example.com uv run python main.py examples/io_example.alp
 
 - `@def` — declares type aliases, unions, literals, and constrained types
 - `@shape` — declares simple structs with fields and primitive types (`str`, `int`, `float`, `bool`, `ts`)
+- `@tool` — declares external tool definitions for command, HTTP, and Python integrations
 - `@fn` — function node with optional `in`, `out`, `@const`, `@op`, `@llm`, `@expect`, `@retry`
 - `@flow` — list of edges `[src, dst, meta]`
 
@@ -26,6 +27,29 @@ The `@def` construct supports advanced type definitions beyond basic structs:
 - **Constrained types**: `{"kind":"@def","id":"Email","type":"str","constraint":{"pattern":"^[^@]+@[^@]+$"}}`
 
 Supported constraints: `minLength`, `maxLength`, `pattern` (regex), `min`, `max` for numbers.
+
+### External tool integration with `@tool`
+
+The `@tool` construct enables integration with external systems:
+
+- **Command tools**: Execute shell commands with argument substitution
+  ```json
+  {"kind":"@tool","id":"git_status","implementation":{"type":"command","command":"git status --porcelain"}}
+  ```
+
+- **HTTP tools**: Make REST API calls with URL templating
+  ```json
+  {"kind":"@tool","id":"weather","implementation":{"type":"http","url":"https://api.weather.com/v1/current?q={city}","method":"GET"}}
+  ```
+
+- **Python tools**: Call Python functions from whitelisted modules
+  ```json
+  {"kind":"@tool","id":"analyze","implementation":{"type":"python","module":"mytools","function":"analyze_data"}}
+  ```
+
+Use tools via the `tool_call` operation: `["tool_call", {"tool": "tool_id", "args": {"param": "value"}}]`
+
+**Security**: Tools require explicit allowlists via environment variables (`ALP_TOOL_ALLOW_COMMANDS`, `ALP_HTTP_ALLOWLIST`, `ALP_TOOL_PYTHON_MODULES`).
 
 ### Stable vocabulary (tokens <-> concept IDs)
 
@@ -47,6 +71,7 @@ Supported constraints: `minLength`, `maxLength`, `pattern` (regex), `min`, `max`
 - Strings: `concat({ a, b } | { items }) -> string`, `join({ items, sep }) -> string`, `split({ text, sep }) -> list<string>`
 - File I/O: `read_file({ path, encoding? }) -> { text }`, `write_file({ path, text, encoding?, append? }) -> { ok }`
 - HTTP: Generic `http({ method, url, headers?, json?|data? }) -> { status:int, text:str }`
+- Tools: `tool_call({ tool, args }) -> object` — call external tool defined with `@tool`
  - Stdin: `read_stdin({ mode?: "all"|"line", max_bytes? }) -> { text }` (requires `ALP_STDIN_ALLOW=1`)
 
 ### Variables and argument resolution

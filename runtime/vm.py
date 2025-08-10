@@ -20,11 +20,14 @@ def register_op(name: str, func):
 def load_graph(path):
     base_dir = os.path.dirname(os.path.abspath(path))
     shapes, fns, flow = {}, {}, []
+    tools = {}  # Store tool definitions
 
-    def _merge(s2, f2, fl2):
+    def _merge(s2, f2, fl2, t2=None):
         shapes.update(s2)
         fns.update(f2)
         flow.extend(fl2)
+        if t2:
+            tools.update(t2)
 
     def _load_file(pth, visited):
         ap = os.path.abspath(pth)
@@ -46,8 +49,8 @@ def load_graph(path):
                     if not isinstance(rel, str) or not rel:
                         continue
                     child = os.path.join(os.path.dirname(ap), rel)
-                    s2, f2, fl2 = load_graph(child)
-                    _merge(s2, f2, fl2)
+                    s2, f2, fl2, t2 = load_graph(child)
+                    _merge(s2, f2, fl2, t2)
                     continue
                 if n.get("kind") == "@shape":
                     shape_def = {"fields": n.get("fields", {})}
@@ -66,13 +69,27 @@ def load_graph(path):
                     if "constraint" in n:
                         type_def["constraint"] = n["constraint"]
                     shapes[n["id"]] = type_def
+                elif n.get("kind") == "@tool":
+                    # Tool definition - external function specification
+                    tool_def = {"id": n.get("id")}
+                    if "name" in n:
+                        tool_def["name"] = n["name"]
+                    if "description" in n:
+                        tool_def["description"] = n["description"]
+                    if "input_schema" in n:
+                        tool_def["input_schema"] = n["input_schema"]
+                    if "output_schema" in n:
+                        tool_def["output_schema"] = n["output_schema"]
+                    if "implementation" in n:
+                        tool_def["implementation"] = n["implementation"]
+                    tools[n["id"]] = tool_def
                 elif n.get("kind") == "@fn":
                     fns[n["id"]] = n
                 elif n.get("kind") == "@flow":
                     flow.extend(n.get("edges", []))
 
     _load_file(path, set())
-    return shapes, fns, flow
+    return shapes, fns, flow, tools
 
 
 def hash_obj(o):
@@ -558,7 +575,7 @@ def call_llm_batch(task, input_list, schema_name, shapes, retries=3, provider: s
     raise RuntimeError(f"LLM batch failed schema validation after {retries} attempts: {last_err}")
 
 
-def exec_fn(fn, shapes, fns, inbound=None):
+def exec_fn(fn, shapes, fns, inbound=None, tools=None):
     env, result = {}, None
     if inbound is not None:
         declared_inputs = (fn.get("in") or {})
@@ -596,7 +613,8 @@ def exec_fn(fn, shapes, fns, inbound=None):
             "env": env,
             "shapes": shapes,
             "fns": fns,
-            "exec_fn": lambda _fn, _inb=None: exec_fn(_fn, shapes, fns, inbound=_inb),
+            "tools": tools or {},
+            "exec_fn": lambda _fn, _inb=None: exec_fn(_fn, shapes, fns, inbound=_inb, tools=tools),
             "call_llm": lambda task, input_obj, schema, _shapes, retries=3, provider=None, model=None: call_llm(task, input_obj, schema, shapes, retries=retries, provider=provider, model=model),
             "call_llm_batch": lambda task, items, schema, _shapes, retries=3, provider=None, model=None: call_llm_batch(task, items, schema, shapes, retries=retries, provider=provider, model=model),
             "get_provider": lambda provider=None, model=None: get_provider(provider, model),
@@ -694,7 +712,7 @@ def run(path):
     from runtime.stdlib import register_all as _register_all
     _register_all(OPS, register_op)
 
-    shapes, fns, flow = load_graph(path)
+    shapes, fns, flow, tools = load_graph(path)
     if not flow:
         # fallback to any no-input fn; if multiple, run the first deterministically by id
         candidates = [k for k, fn in fns.items() if not fn.get("in")]
@@ -794,7 +812,7 @@ def run(path):
         if inbound is None:
             inbound = last_result
         # Evaluate this node
-        result, tr = exec_fn(fns[node_id], shapes, fns, inbound=inbound)
+        result, tr = exec_fn(fns[node_id], shapes, fns, inbound=inbound, tools=tools)
         traces.append(tr)
         data_out_by_node[node_id] = result
         last_result = result

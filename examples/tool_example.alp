@@ -1,0 +1,5 @@
+{"kind":"@shape","id":"CommandResult","fields":{"stdout":"str","stderr":"str","returncode":"int"}}
+{"kind":"@shape","id":"Result","fields":{"tool_output":"CommandResult","status":"str"}}
+{"kind":"@tool","id":"echo_tool","name":"Echo Command","description":"Simple echo command","implementation":{"type":"command","command":"echo {message}"}}
+{"kind":"@fn","id":"test_tool","in":{},"out":"Result","@const":{"message":"Hello from tool!","status":"success"},"@op":[["tool_call",{"tool":"echo_tool","args":{"message":"$message"}},{"as":"tool_output"}],["json_parse",{"text":"null"}]],"@expect":{"type":"Result","synthesize":true}}
+{"kind":"@flow","edges":[["test_tool",null,{}]]}

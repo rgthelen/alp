@@ -39,6 +39,28 @@
       "defaults": "optional object of default values applied before validation",
       "example": {"kind":"@shape","id":"Greeting","fields":{"text":"str"}}
     },
+    "@tool": {
+      "id": "string",
+      "name": "human-readable tool name (optional)",
+      "description": "tool description for documentation (optional)",
+      "input_schema": "shapeId for input validation (optional)",
+      "output_schema": "shapeId for output validation (optional)",
+      "implementation": {
+        "type": "command | http | python",
+        "command": "shell command with {arg} placeholders (for command type)",
+        "url": "HTTP URL with {arg} placeholders (for http type)",
+        "method": "HTTP method GET|POST|PUT|DELETE (for http type)",
+        "headers": "HTTP headers object (for http type)",
+        "json_body": "true to send args as JSON body (for http type)",
+        "module": "Python module name (for python type)",
+        "function": "Python function name (for python type)"
+      },
+      "examples": [
+        {"kind":"@tool","id":"echo","name":"Echo Tool","implementation":{"type":"command","command":"echo {message}"}},
+        {"kind":"@tool","id":"weather","implementation":{"type":"http","url":"https://api.weather.com/v1/current?q={city}","method":"GET"}},
+        {"kind":"@tool","id":"process","implementation":{"type":"python","module":"mytools","function":"process_data"}}
+      ]
+    },
     "@fn": {
       "id": "string",
       "in": "object mapping paramName -> shapeId (optional)",
@@ -88,7 +110,8 @@
     {"name":"write_file","args":{"path":"string","text":"string","encoding?":"string","append?":"bool"},"returns":"{ ok:boolean }","security":"Requires ALP_IO_ALLOW_WRITE=1 and path under ALP_IO_ROOT"},
     {"name":"http","args":{"method":"string","url":"string","headers?":"object","json?":"any","data?":"string"},"returns":"{ status:int, text:string }","security":"Requires ALP_HTTP_ALLOWLIST; local/private hosts blocked unless ALP_HTTP_BLOCK_LOCAL=0"},
     {"name":"json_parse","args":{"text":"string"},"returns":"object"},
-    {"name":"json_get","args":{"obj":"any","path":"string"},"returns":"any","notes":"Dot path supports object keys and integer list indices"}
+    {"name":"json_get","args":{"obj":"any","path":"string"},"returns":"any","notes":"Dot path supports object keys and integer list indices"},
+    {"name":"tool_call","args":{"tool":"string","args":"object"},"returns":"object","notes":"Call external tool defined with @tool","security":"Requires tool allowlist configuration"}
   ],
   "llm": {
     "provider_env": {
@@ -107,6 +130,12 @@
     "ALP_HTTP_BLOCK_LOCAL": "1 (default) blocks localhost/private IPs; set 0 to allow",
     "ALP_HTTP_TIMEOUT": "seconds (default 10)",
     "ALP_HTTP_MAX_BYTES": "max response bytes (default 1,000,000)"
+  },
+  "tool_security": {
+    "ALP_TOOL_ALLOW_COMMANDS": "1 to enable command-type tools",
+    "ALP_TOOL_COMMAND_ALLOWLIST": "comma-separated command prefixes allowed",
+    "ALP_TOOL_PYTHON_MODULES": "comma-separated Python modules allowed",
+    "ALP_TOOL_CWD": "working directory for command tools (default: CWD)"
   },
   "debug": {
     "ALP_EXPLAIN": "1 to print env snapshots after each op to stderr"

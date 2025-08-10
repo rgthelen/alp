@@ -1,0 +1,7 @@
+{"kind":"@shape","id":"CommandResult","fields":{"stdout":"str","stderr":"str","returncode":"int"}}
+{"kind":"@shape","id":"HttpResult","fields":{"status":"int","data":"map","headers":"map"}}
+{"kind":"@shape","id":"ToolDemo","fields":{"echo_result":"CommandResult","http_result":"HttpResult","message":"str"}}
+{"kind":"@tool","id":"echo_tool","name":"Echo Tool","description":"Echoes a message","implementation":{"type":"command","command":"echo {text}"}}
+{"kind":"@tool","id":"http_tool","name":"HTTP Tool","description":"Makes HTTP requests","implementation":{"type":"http","url":"https://httpbin.org/get?message={query}","method":"GET"}}
+{"kind":"@fn","id":"demo_tools","in":{},"out":"ToolDemo","@const":{"text":"Hello World","query":"test","message":"Tools working!"},"@op":[["tool_call",{"tool":"echo_tool","args":{"text":"$text"}},{"as":"echo_result"}],["tool_call",{"tool":"http_tool","args":{"query":"$query"}},{"as":"http_result"}],["json_parse",{"text":"null"}]],"@expect":{"type":"ToolDemo","synthesize":true}}
+{"kind":"@flow","edges":[["demo_tools",null,{}]]}

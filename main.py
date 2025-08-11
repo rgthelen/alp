@@ -69,7 +69,16 @@ if program_path.endswith(".jsonl"):
             ok = False
     sys.exit(0 if ok else 1)
 else:
-    completed = subprocess.run([sys.executable, vm_path, program_path], capture_output=True, text=True)
-    print(completed.stdout)
-    if completed.stderr:
-        print(completed.stderr)
+    # Check if this is a UI program that needs to stay running
+    if "/ui/" in program_path or "_ui.alp" in program_path:
+        # Run UI programs without capturing output so they can run interactively
+        try:
+            subprocess.run([sys.executable, vm_path, program_path])
+        except KeyboardInterrupt:
+            print("\nUI closed.")
+    else:
+        # Regular programs: capture output and print
+        completed = subprocess.run([sys.executable, vm_path, program_path], capture_output=True, text=True)
+        print(completed.stdout)
+        if completed.stderr:
+            print(completed.stderr)

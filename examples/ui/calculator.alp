@@ -1,0 +1,6 @@
+{"kind":"@shape","id":"UILaunch","fields":{"launched":"bool","url":"str"}}
+{"kind":"@shape","id":"CalcInput","fields":{"expr":"str"}}
+{"kind":"@shape","id":"CalcResult","fields":{"value":"float","expr":"str"}}
+{"kind":"@fn","id":"do_calc","in":"CalcInput","out":"CalcResult","@op":[["calc_eval",{"expr":"$in.expr"},{"as":"result"}]],"@expect":{"value":"$result.value","expr":"$in.expr"}}
+{"kind":"@fn","id":"create_calc_ui","in":{},"out":"UILaunch","@op":[["ui_create",{"title":"ALP Expression Calculator","description":"Evaluate mathematical expressions"},{"as":"created"}],["ui_add_input",{"name":"expr","type":"textbox","label":"Expression (try: 2+2, (3+4)*5, 2**8)","default":"(3 + 4) * 5"},{"as":"input"}],["ui_add_output",{"name":"result","type":"json","label":"Result"},{"as":"output"}],["ui_set_handler",{"function":"do_calc","inputs":["expr"],"outputs":["result"]},{"as":"handler"}],["ui_launch",{"port":7864},{"as":"launched"}],["ui_wait",{"timeout":300},{"as":"waited"}]],"@expect":{"launched":"$launched.launched","url":"$launched.url"}}
+{"kind":"@flow","edges":[["create_calc_ui",null,{}]]}

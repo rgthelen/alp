@@ -580,21 +580,27 @@ def exec_fn(fn, shapes, fns, inbound=None, tools=None):
     if inbound is not None:
         declared_inputs = (fn.get("in") or {})
         if declared_inputs:
-            if len(declared_inputs) == 1 and isinstance(inbound, dict):
-                # Single input with dict inbound - check if dict has matching key
-                input_name = next(iter(declared_inputs.keys()))
-                if input_name in inbound:
-                    env[input_name] = inbound[input_name]
-                else:
+            if isinstance(declared_inputs, str):
+                # Input is a type reference (e.g., "in": "CalcInput")
+                # Bind the inbound data to the "in" variable
+                env["in"] = inbound
+            elif isinstance(declared_inputs, dict):
+                # Input is a dict of named inputs
+                if len(declared_inputs) == 1 and isinstance(inbound, dict):
+                    # Single input with dict inbound - check if dict has matching key
+                    input_name = next(iter(declared_inputs.keys()))
+                    if input_name in inbound:
+                        env[input_name] = inbound[input_name]
+                    else:
+                        env[input_name] = inbound
+                elif len(declared_inputs) == 1:
+                    # Single input with scalar inbound - bind directly
+                    input_name = next(iter(declared_inputs.keys()))
                     env[input_name] = inbound
-            elif len(declared_inputs) == 1:
-                # Single input with scalar inbound - bind directly
-                input_name = next(iter(declared_inputs.keys()))
-                env[input_name] = inbound
-            else:
-                # Multiple inputs - map entire inbound to each
-                for name in declared_inputs.keys():
-                    env[name] = inbound
+                else:
+                    # Multiple inputs - map entire inbound to each
+                    for name in declared_inputs.keys():
+                        env[name] = inbound
 
 
     for k, v in (fn.get("@const") or {}).items():

@@ -1,0 +1,3 @@
+{"kind":"@shape","id":"SimpleResult","fields":{"message":"str","processed":"bool"}}
+{"kind":"@fn","id":"create_simple_ui","in":{},"out":"SimpleResult","@op":[["ui_create",{"title":"Simple ALP UI Test","description":"Testing Gradio integration"},{"as":"created"}],["ui_add_input",{"name":"user_input","type":"textbox","label":"Enter some text"},{"as":"input_added"}],["ui_add_output",{"name":"response","type":"textbox","label":"Response"},{"as":"output_added"}],["ui_set_handler",{"function":"echo","inputs":["user_input"],"outputs":["response"]},{"as":"handler"}],["ui_launch",{"port":7862},{"as":"launched"}],["ui_wait",{},{"as":"waited"}]],"@expect":{"message":"$launched.url","processed":true}}
+{"kind":"@flow","edges":[["create_simple_ui",null,{}]]}

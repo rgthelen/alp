@@ -7,4 +7,5 @@ requires-python = ">=3.12"
 dependencies = [
     "anthropic>=0.62.0",
     "openai>=1.99.5",
+    "gradio>=4.0.0",
 ]

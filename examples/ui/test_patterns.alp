@@ -1,8 +1,0 @@
-{"kind":"@shape","id":"SingleInput","fields":{"text":"str"}}
-{"kind":"@shape","id":"MultiInput","fields":{"a":"float","b":"float"}}
-{"kind":"@shape","id":"TestResult","fields":{"result":"str","type":"str"}}
-{"kind":"@fn","id":"test_single","in":"SingleInput","out":"TestResult","@op":[["concat",{"items":["Single input: ","$in.text"]},{"as":"msg"}]],"@expect":{"result":"$msg","type":"single"}}
-{"kind":"@fn","id":"test_multi","in":"MultiInput","out":"TestResult","@op":[["add",{"a":"$in.a","b":"$in.b"},{"as":"sum"}],["concat",{"items":["Sum: ","$sum"]},{"as":"msg"}]],"@expect":{"result":"$msg","type":"multi"}}
-{"kind":"@fn","id":"test_none","in":{},"out":"TestResult","@const":{"msg":"No input function"},"@expect":{"result":"$msg","type":"none"}}
-{"kind":"@shape","id":"UIResult","fields":{"launched":"bool"}}
-{"kind":"@fn","id":"create_test_ui","in":{},"out":"UIResult","@op":[["ui_create",{"title":"Input Pattern Test"},{"as":"created"}],["ui_add_input",{"name":"text","type":"textbox","label":"Text (for single)"},{"as":"i1"}],["ui_add_input",{"name":"a","type":"number","label":"A (for multi)"},{"as":"i2"}],["ui_add_input",{"name":"b","type":"number","label":"B (for multi)"},{"as":"i3"}],["ui_add_output",{"name":"result","type":"json"},{"as":"out"}],["ui_launch",{"port":7865},{"as":"launched"}],["ui_wait",{"timeout":60},{"as":"waited"}]],"@expect":{"launched":true}}

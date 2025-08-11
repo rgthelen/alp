@@ -1,0 +1,3 @@
+{"kind":"@shape","id":"TextInput","fields":{"text":"str","operation":"str"}}
+{"kind":"@shape","id":"TextResult","fields":{"original":"str","result":"str","operation":"str"}}
+{"kind":"@fn","id":"process_text","in":"TextInput","out":"TextResult","@op":[["split",{"text":"$in.text","sep":" "},{"as":"words"}],["concat",{"items":["Word count: ","$words"]},{"as":"word_info"}],["concat",{"items":["$in.text"," -> ","$word_info"]},{"as":"processed"}]],"@expect":{"original":"$in.text","result":"$processed","operation":"$in.operation"}}

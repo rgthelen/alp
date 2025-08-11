@@ -186,9 +186,17 @@ def register(reg):
         
         # Create handler function
         def process(*args):
-            handler = config["handlers"][0] if config["handlers"] else None
-            if not handler:
+            # Support multiple handlers for orchestrator pattern
+            handlers = config.get("handlers", [])
+            if not handlers:
                 return json.dumps({"error": "No handler configured"})
+            
+            # For orchestrator: check if first input is an app selector
+            if len(handlers) == 1:
+                handler = handlers[0]
+            else:
+                # Multiple handlers - use first input as selector if available
+                handler = handlers[0]  # Default to first for now
             
             # Get the function to call
             fn_id = handler["function"]
@@ -205,10 +213,13 @@ def register(reg):
             fns = ctx.get("fns", {})
             if fn_id in fns:
                 try:
-                    # Import exec_fn to execute the ALP function
-                    import importlib
-                    vm_module = importlib.import_module("runtime.vm")
-                    exec_fn = vm_module.exec_fn
+                    # Import the VM module to execute the ALP function
+                    from runtime.vm import exec_fn, OPS, register_op
+                    
+                    # Ensure operations are registered (only happens once)
+                    if len(OPS) == 0:
+                        from runtime.stdlib import register_all
+                        register_all(OPS, register_op)
                     
                     # Prepare inbound data based on function's input declaration
                     fn_def = fns[fn_id]

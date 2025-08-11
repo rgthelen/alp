@@ -83,3 +83,4 @@ site/
 # UV / pip caches
 pip-wheel-metadata/
 __pypackages__/
+.gradio/

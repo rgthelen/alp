@@ -1,5 +1,18 @@
 # Artificial Logic Protocol (ALP)
-A programming language/protocol designed specifically for LLMs
+
+A programming language designed specifically for Large Language Models (LLMs).
+
+## Why ALP?
+
+LLMs need a programming language that matches how they process information - as structured data flows rather than imperative step-by-step instructions. Traditional programming languages were designed for humans and CPUs, but LLMs operate differently:
+
+- **JSON-native**: LLMs excel at producing valid JSON, making it the ideal syntax
+- **Declarative**: Define what should happen, not how - perfect for LLM reasoning
+- **Graph-based**: Natural representation of data dependencies and parallel operations
+- **Type-safe**: Strong typing with validation prevents common LLM errors
+- **Sandboxed**: Security-first design prevents unintended system access
+
+ALP bridges the gap between natural language and computation, giving LLMs a reliable way to express complex logic, orchestrate API calls, and process data - all while maintaining safety and predictability.
 
 ## Run
 

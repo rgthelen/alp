@@ -58,11 +58,11 @@ def register(reg):
         # If branch is an operation array, execute it
         if isinstance(result, list) and len(result) >= 2:
             # This is an operation to execute
-            from runtime.vm import OPS
             op_name = result[0]
             op_args = result[1] if len(result) > 1 else {}
-            if op_name in OPS:
-                return OPS[op_name](op_args, ctx)
+            ops = ctx.get('ops', {})
+            if op_name in ops:
+                return ops[op_name](op_args, ctx)
         
         return result
     
@@ -86,11 +86,11 @@ def register(reg):
         
         # If result is an operation array, execute it
         if isinstance(result, list) and len(result) >= 2:
-            from runtime.vm import OPS
             op_name = result[0]
             op_args = result[1] if len(result) > 1 else {}
-            if op_name in OPS:
-                return OPS[op_name](op_args, ctx)
+            ops = ctx.get('ops', {})
+            if op_name in ops:
+                return ops[op_name](op_args, ctx)
         
         return result
     
@@ -115,11 +115,11 @@ def register(reg):
         # Try to execute the main operation
         try:
             if isinstance(do_op, list) and len(do_op) >= 2:
-                from runtime.vm import OPS
                 op_name = do_op[0]
                 op_args = do_op[1] if len(do_op) > 1 else {}
-                if op_name in OPS:
-                    result = OPS[op_name](op_args, ctx)
+                ops = ctx.get('ops', {})
+                if op_name in ops:
+                    result = ops[op_name](op_args, ctx)
                 else:
                     raise RuntimeError(f"Unknown operation: {op_name}")
             else:
@@ -129,14 +129,14 @@ def register(reg):
             # Execute catch branch
             if catch_op is not None:
                 if isinstance(catch_op, list) and len(catch_op) >= 2:
-                    from runtime.vm import OPS
                     op_name = catch_op[0]
                     op_args = catch_op[1] if len(catch_op) > 1 else {}
                     # Add error to context for catch handler
                     catch_ctx = dict(ctx)
                     catch_ctx["error"] = error
-                    if op_name in OPS:
-                        result = OPS[op_name](op_args, catch_ctx)
+                    ops = ctx.get('ops', {})
+                    if op_name in ops:
+                        result = ops[op_name](op_args, catch_ctx)
                 else:
                     result = catch_op
         
@@ -145,11 +145,11 @@ def register(reg):
         if finally_op is not None:
             try:
                 if isinstance(finally_op, list) and len(finally_op) >= 2:
-                    from runtime.vm import OPS
                     op_name = finally_op[0]
                     op_args = finally_op[1] if len(finally_op) > 1 else {}
-                    if op_name in OPS:
-                        finally_result = OPS[op_name](op_args, ctx)
+                    ops = ctx.get('ops', {})
+                    if op_name in ops:
+                        finally_result = ops[op_name](op_args, ctx)
                 else:
                     finally_result = finally_op
             except:

@@ -614,6 +614,7 @@ def exec_fn(fn, shapes, fns, inbound=None, tools=None):
             "shapes": shapes,
             "fns": fns,
             "tools": tools or {},
+            "ops": OPS,  # Pass the operations registry to operations
             "exec_fn": lambda _fn, _inb=None: exec_fn(_fn, shapes, fns, inbound=_inb, tools=tools),
             "call_llm": lambda task, input_obj, schema, _shapes, retries=3, provider=None, model=None: call_llm(task, input_obj, schema, shapes, retries=retries, provider=provider, model=model),
             "call_llm_batch": lambda task, items, schema, _shapes, retries=3, provider=None, model=None: call_llm_batch(task, items, schema, shapes, retries=retries, provider=provider, model=model),

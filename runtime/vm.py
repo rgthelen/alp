@@ -717,6 +717,13 @@ def run(path):
     # Import stdlib ops package
     from runtime.stdlib import register_all as _register_all
     _register_all(OPS, register_op)
+    
+    # Load extras if available (e.g., ui_gradio)
+    try:
+        from runtime.extras import register_all as _register_extras
+        _register_extras(OPS, register_op)
+    except ImportError:
+        pass  # Extras are optional
 
     shapes, fns, flow, tools = load_graph(path)
     if not flow:

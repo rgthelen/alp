@@ -1,49 +1,28 @@
-# ALP UI System
+# ALP UI Examples
 
-This directory contains examples of ALP programs that create interactive user interfaces using Gradio.
+This directory demonstrates how to build user interfaces in ALP with proper separation of concerns.
 
-## ✨ Features
+## ✨ Key Principles
 
-- **🔌 Seamless Integration**: UI operations are part of the ALP stdlib
-- **🎯 Declarative**: Define UIs using ALP's JSON-based syntax
-- **🚀 Orchestration**: Connect multiple ALP programs through UI
-- **📱 Modern Interface**: Powered by Gradio for web-based UIs
+- **🎯 Separation of Concerns**: UI files handle interface only, logic lives elsewhere
+- **📦 Import & Reuse**: UI imports logic modules rather than duplicating code
+- **🔌 Pure Orchestration**: UI functions route events to imported logic functions
+- **📱 Gradio Integration**: Web-based UIs powered by the extras/ui_gradio module
 
-## 📁 Examples
+## 📁 Example
 
 ### simple_calculator.alp
-A clean calculator interface demonstrating core UI concepts:
-- **Imports** `calculator.alp` for core math logic
-- **Delegates** calculations to imported functions
-- **Handles** UI interaction and result display
-- JSON result formatting
-
-### basic_orchestrator.alp  
-Multi-operation interface showing orchestration patterns:
-- **Imports** core logic modules
-- **Orchestrates** operations through UI selections
-- Dynamic result formatting with markdown
-- Technical details output
-
-### advanced_orchestrator.alp
-Comprehensive example demonstrating:
-- **Multiple imports** from different logic modules
-- **Conditional routing** based on user selection
-- **Pure orchestration** without embedded logic
-- Formatted and raw output options
+A clean calculator interface demonstrating proper architecture:
+- **Imports** `../calculator.alp` for core math logic
+- **Delegates** all calculations to imported functions
+- **Handles** only UI setup and event routing
+- **Zero business logic** in the UI file itself
 
 ## 🚀 Usage
 
-Run any example:
 ```bash
-# Calculator UI (port 7860)
+# Run the calculator UI (default port 7860)
 uv run python main.py examples/ui/simple_calculator.alp
-
-# Basic Orchestrator UI (port 7861)
-uv run python main.py examples/ui/basic_orchestrator.alp
-
-# Advanced Orchestrator UI (port 7862)
-uv run python main.py examples/ui/advanced_orchestrator.alp
 ```
 
 The UI will be available at the specified port (default: 7860).
@@ -86,19 +65,45 @@ The UI will be available at the specified port (default: 7860).
 7. **Port Management**: Use different ports for multiple concurrent UIs
 8. **Resource Cleanup**: `ui_wait` ensures proper server lifecycle management
 
-### Example Structure
-```json
-// GOOD: UI file imports and orchestrates
-{"kind":"@import","path":"../calculator.alp"}
-{"kind":"@fn","id":"ui_handler",
-  "@op":[["calc_entry", {...}]]  // Uses imported function
-}
+### Example Pattern
 
-// BAD: UI file contains logic
-{"kind":"@fn","id":"ui_handler",
-  "@op":[["calc_eval", {...}]]  // Direct logic in UI
+The `simple_calculator.alp` demonstrates the correct pattern:
+
+```json
+// 1. Import the logic module
+{"kind":"@import","path":"../calculator.alp"}
+
+// 2. Define UI-specific shapes for input/output
+{"kind":"@shape","id":"UICalcInput","fields":{"expression":"str"}}
+{"kind":"@shape","id":"UICalcResult","fields":{"result":"str","expression":"str"}}
+
+// 3. Create handler that calls imported logic
+{"kind":"@fn","id":"ui_calculator_handler","in":"UICalcInput","out":"UICalcResult",
+  "@op":[["calc_eval",{"expr":"$in.expression"},{"as":"result"}]],
+  "@expect":{"result":"$result.value","expression":"$in.expression"}}
+
+// 4. Build UI and connect handler
+{"kind":"@fn","id":"create_calculator_ui",
+  "@op":[
+    ["ui_create",{"title":"🧮 ALP Calculator"}],
+    ["ui_add_input",{"name":"expression","type":"textbox"}],
+    ["ui_add_output",{"name":"result","type":"json"}],
+    ["ui_set_handler",{"function":"ui_calculator_handler","inputs":["expression"],"outputs":["result"]}],
+    ["ui_launch",{"port":7860}],
+    ["ui_wait",{}]
+  ]}
+```
+
+### Anti-Pattern to Avoid
+
+```json
+// BAD: UI file contains business logic directly
+{"kind":"@fn","id":"calculator",
+  "@op":[["calc_eval",{"expr":"$in.expression"}]]  // ❌ Logic in UI
 }
 ```
+
+Always import and delegate to logic modules instead!
 
 ## 🔧 Architecture
 

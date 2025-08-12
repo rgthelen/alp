@@ -177,7 +177,10 @@ def register(reg):
         array = a.get("array", [])
         field = a.get("field")
         fn_id = a.get("fn")
-        template = a.get("template")
+        
+        # Get the original template from unresolved args if available
+        original_args = ctx.get("original_args", {})
+        template = original_args.get("template") if original_args else a.get("template")
         
         if not isinstance(array, list):
             return {"result": [], "count": 0}

@@ -1,0 +1,150 @@
+# Cursor Rules for ALP (Artificial Logic Protocol)
+
+You are working with ALP, a JSON-based programming language designed for LLM workflows. ALP programs are JSONL files (one JSON object per line) that define data flow graphs.
+
+## Project Context
+
+ALP is a domain-specific language that:
+- Uses JSON for declarative programming
+- Executes as a directed acyclic graph (DAG)
+- Provides built-in operations for math, strings, I/O, HTTP, and LLM calls
+- Enforces strict security sandboxing by default
+- Supports strong typing with validation
+
+## Code Style Guidelines
+
+When writing ALP programs:
+1. Each JSON object must be on a single line (JSONL format)
+2. Use meaningful node IDs that describe their purpose
+3. Store intermediate results with `{"as": "variable_name"}` for clarity
+4. Always define @shape nodes for type safety
+5. Place @flow edges at the end of the file
+
+## ALP Program Structure
+
+Every ALP program needs:
+```jsonl
+{"kind":"@shape","id":"TypeName","fields":{...}}  // Data structures
+{"kind":"@fn","id":"function_name","in":"InputType","out":"OutputType","@op":[...]}  // Functions
+{"kind":"@flow","edges":[["source","target",{}]]}  // Execution flow
+```
+
+## Common Operations Quick Reference
+
+### String Operations
+- `["concat",{"items":["str1","str2"]},{"as":"result"}]`
+- `["join",{"items":["a","b"],"sep":","},{"as":"csv"}]`
+- `["split",{"text":"a,b","sep":","},{"as":"parts"}]`
+
+### Math Operations
+- `["add",{"a":1,"b":2},{"as":"sum"}]`
+- `["calc_eval",{"expr":"2+2*3"},{"as":"result"}]`
+- `["sum",{"items":[1,2,3]},{"as":"total"}]`
+
+### I/O Operations
+- `["read_file",{"path":"file.txt"},{"as":"content"}]`
+- `["http",{"method":"GET","url":"https://api.example.com"},{"as":"response"}]`
+- `["json_parse",{"text":"$response.text"},{"as":"data"}]`
+- `["json_get",{"obj":"$data","path":"field.nested"},{"as":"value"}]`
+
+### LLM Operations
+```json
+{"@llm":{"task":"describe_task","input":{"text":"$input"},"schema":"OutputShape"}}
+```
+
+## Variable References
+
+- Use `$variable` to reference values
+- Use dot notation for nested access: `$response.data.field`
+- Variables are scoped to the function they're defined in
+
+## Security Model
+
+ALP enforces strict sandboxing. Operations require explicit permissions:
+
+- **HTTP requests**: Need `ALP_HTTP_ALLOWLIST=domain1,domain2`
+- **File writes**: Need `ALP_ALLOW_WRITE=true`
+- **File I/O path**: Restricted to `ALP_IO_ROOT` (default: current directory)
+- **External tools**: Need specific allowlist environment variables
+
+## Running ALP Programs
+
+```bash
+# Basic execution
+uv run python main.py examples/program.alp
+
+# With HTTP permission
+ALP_HTTP_ALLOWLIST=api.example.com uv run python main.py examples/program.alp
+
+# With file write permission
+ALP_IO_ROOT=/tmp ALP_ALLOW_WRITE=true uv run python main.py examples/program.alp
+
+# With LLM provider (otherwise uses mock)
+ALP_MODEL_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-ant-... uv run python main.py examples/program.alp
+```
+
+## Testing
+
+Test files use JSONL format in `test/tests.jsonl`:
+```json
+{"program":{...},"expect":"expected output","env":{"ENV_VAR":"value"}}
+```
+
+Run tests with:
+```bash
+uv run python main.py test/tests.jsonl
+```
+
+## File Organization
+
+- `/examples/` - Example ALP programs (*.alp files)
+- `/runtime/` - VM and interpreter code
+- `/runtime/stdlib/` - Built-in operations
+- `/test/` - Test specifications
+- `/.claude/` - Claude Code configuration
+- `/.cursor/` - Cursor IDE configuration
+
+## Best Practices
+
+1. **Start with examples**: Look at existing examples in `/examples/` for patterns
+2. **Use mock LLM for development**: No API key needed during development
+3. **Test with sandboxing**: Always test with security restrictions first
+4. **Validate types**: Use @shape definitions for type checking
+5. **Name your operations**: Use `{"as":"name"}` for better debugging
+6. **Keep it simple**: Each function should do one thing well
+7. **Document security needs**: Comment on required environment variables
+
+## Common Patterns
+
+### API Integration Pattern
+```jsonl
+{"kind":"@shape","id":"ApiResponse","fields":{"data":"str","status":"int"}}
+{"kind":"@fn","id":"fetch_api","in":{},"out":"ApiResponse","@const":{"url":"https://api.example.com/endpoint"},"@op":[["http",{"method":"GET","url":"$url"},{"as":"resp"}],["json_parse",{"text":"$resp.text"},{"as":"data"}]]}
+```
+
+### Data Pipeline Pattern
+```jsonl
+{"kind":"@fn","id":"pipeline","in":"Input","out":"Output","@op":[["step1",{...},{"as":"result1"}],["step2",{"data":"$result1"},{"as":"result2"}],["step3",{"data":"$result2"},{"as":"final"}]]}
+```
+
+### Conditional Flow Pattern
+```jsonl
+{"kind":"@flow","edges":[["check","handle_success",{"when":{"eq":["$value.status","ok"]}}],["check","handle_error",{"when":{"ne":["$value.status","ok"]}}]]}
+```
+
+## Error Handling
+
+- Operations return `{"error": "message"}` on failure
+- Use conditional flows to handle errors
+- Check operation results before using them
+
+## Development Workflow
+
+1. Define data structures with @shape
+2. Implement functions with @fn and @op
+3. Connect functions with @flow
+4. Test locally with mock providers
+5. Add security permissions as needed
+6. Test with real providers
+
+Remember: ALP is designed for safety and predictability. Embrace the sandboxing and type system - they prevent bugs and security issues.
